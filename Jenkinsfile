@@ -1,9 +1,9 @@
 pipeline {
     agent any
 
-    tools {
-        maven 'maven-3'
-        jdk 'default'
+    environment {
+        IMAGE_NAME = "petclinic"
+        IMAGE_TAG  = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -13,22 +13,36 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
+        stage('Run Tests (Dockerized Maven)') {
             steps {
-                sh 'mvn clean verify'
+                sh '''
+                docker run --rm \
+                  -v "$PWD":/app \
+                  -w /app \
+                  maven:3.9.6-eclipse-temurin-17 \
+                  mvn clean test
+                '''
             }
         }
 
-        stage('Archive Artifacts') {
+        stage('Build Docker Image') {
             steps {
-                archiveArtifacts artifacts: '**/target/*.jar', fingerprint: true
+                script {
+                    docker.build("${IMAGE_NAME}:${IMAGE_TAG}")
+                }
             }
         }
     }
 
     post {
+        success {
+            echo "Docker image ${IMAGE_NAME}:${IMAGE_TAG} built successfully 🚀"
+        }
+        failure {
+            echo "Pipeline failed ❌"
+        }
         always {
-            junit '**/target/surefire-reports/*.xml'
+            sh 'docker ps -a'
         }
     }
 }
